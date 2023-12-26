@@ -66,6 +66,20 @@ $stream->on('data', function ($data) {
 });
 ```
 
+## multiple  instance
+
+```php
+ProcessManager::instance('task')->initProcessNumber(10);
+ProcessManager::instance('task')->callback(function($stream){
+    return 'task handle'
+});
+
+ProcessManager::instance('cron')->initProcessNumber(5);
+ProcessManager::instance('cron')->callback(function($stream){
+    return 'cron process handle'
+});
+```
+
 ## config
 
 ### number
