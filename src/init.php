@@ -28,7 +28,7 @@ $stream->on('data', function ($chunk)  use ($pid, $unpacker) {
         }
         return $messages;
     } else {
-        ProcessManager::instance()->replay("Task {$pid} tryPack fail\n");
+        ProcessManager::instance()->replayLog("Task {$pid} tryPack fail\n");
     }
 });
 
