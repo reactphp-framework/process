@@ -16,15 +16,16 @@ composer require reactphp-framework/process -vvv
 <?php
 require __DIR__ . '/vendor/autoload.php';
 
-use Reactphp\Framework\Process\Process;
+use Reactphp\Framework\Process\ProcessManager;
+ProcessManager::instance()->initProcessNumber(1);
 
-$stream = Process::callback(function () {
+$stream = ProcessManager::instance()->callback(function () {
     return 'hello world';
 });
 
 $stream->on('data', function ($data) {
     var_dump($data);
-    Process::terminate();
+    ProcessManager::instance()terminate();
 });
 ```
 
@@ -35,15 +36,16 @@ require __DIR__ . '/vendor/autoload.php';
 
 use Reactphp\Framework\Process\Process;
 use React\EventLoop\Loop;
+ProcessManager::instance()->initProcessNumber(1);
 
-$stream = Process::callback(function ($stream) {
+$stream = ProcessManager::instance()->callback(function ($stream) {
     $stream->end('hello world');
     return $stream;
 });
 
 $stream->on('data', function ($data) {
     var_dump($data);
-    Process::terminate();
+    ProcessManager::instance()->terminate();
 });
 
 ```
@@ -55,8 +57,7 @@ $stream->on('data', function ($data) {
 require __DIR__ . '/vendor/autoload.php';
 
 use Reactphp\Framework\Process\Process;
-
-$stream = Process::callback(function () {
+$stream = ProcessManager::instance()->callback(function () {
     return 'hello world';
 }, true); // true after run close
 
@@ -72,38 +73,38 @@ $stream->on('data', function ($data) {
 process number
 
 ```
-Process::$number = 4;
+ProcessManager::instance()->initProcessNumber(4);
 ```
 
 ### log and debug
 
 ```
-Process::$log = true;
-Process::$debug = true;
+ProcessManager::instance()->log = true;
+ProcessManager::instance()->debug = true;
 ```
 
 ### reload 
 
 ```
-Process::reload();
+ProcessManager::instance()->reload();
 ```
 
 ### restart
 
 ```
-Process::restart();
+ProcessManager::instance()->restart();
 ```
 
 ### terminate
 
 ```
-Process::terminate();
+ProcessManager::instance()->terminate();
 ```
 
 ### close
 
 ```
-Process::close();
+ProcessManager::instance()->close();
 ```
 
 ## test

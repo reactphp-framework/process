@@ -3,10 +3,8 @@
 namespace Reactphp\Framework\Process\Tests;
 
 use PHPUnit\Framework\TestCase;
-use Reactphp\Framework\Process\Process;
-use function React\Async\async;
+use Reactphp\Framework\Process\ProcessManager;
 use function React\Async\await;
-use function React\Async\delay;
 use React\Promise\Deferred;
 use React\EventLoop\Loop;
 
@@ -14,15 +12,15 @@ class MultipleCallbackTest extends TestCase
 {
     public function testMultipleCallbackTest()
     {
-        Process::$log = false;
+        ProcessManager::instance()->initProcessNumber(2);
 
         $promises = [];
-        Process::$number = 2;
-        Process::reload();
+        ProcessManager::instance()->setNumber(2);
+        ProcessManager::instance()->reload();
         for ($i = 0; $i < 10; $i++) {
             (function ($i) use (&$promises) {
                 $deferred = new Deferred();
-                $stream = Process::callback(function ($stream) use ($i) {
+                $stream = ProcessManager::instance()->callback(function ($stream) use ($i) {
                     $timer = Loop::addPeriodicTimer(1, function () use ($stream, $i) {
                         $stream->write($i);
                     });
@@ -56,6 +54,6 @@ class MultipleCallbackTest extends TestCase
             '8888',
             '9999',
         ], $data);
-        Process::terminate();
+        ProcessManager::instance()->terminate();
     }
 }

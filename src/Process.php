@@ -11,91 +11,105 @@ use React\Stream;
 
 class Process
 {
-    public static $number = 1;
-    public static $log = false;
-    public static $debug = false;
+    protected $number = 1;
+    public  $log = false;
+    public  $debug = false;
 
-    protected static $stdout;
+    protected  $stdout;
 
-    protected static $processes = [];
-    protected static $processInfo = [];
-    protected static $unpackers = [];
-    protected static $processInit = [];
-    protected static $processEvents = [];
+    protected  $processes = [];
+    protected  $processInfo = [];
+    protected  $unpackers = [];
+    protected  $processInit = [];
+    protected  $processEvents = [];
 
-    protected static $processCallbackStreams = [];
+    protected  $processCallbackStreams = [];
 
-    protected static $running = false;
+    protected  $running = false;
 
-    public static function run($php = null)
+    private $php;
+
+
+    public function __construct($number, $php = null)
     {
-        if (static::$running) {
+        $this->number = $number;
+        $this->php = $php;
+    }
+
+    public function setNumber($number)
+    {
+        $this->number = $number;
+    }
+
+    public function run()
+    {
+        if ($this->running) {
             return;
         }
 
-        static::$running = true;
-        static::$stdout = new \React\Stream\WritableResourceStream(STDOUT);
+        $this->running = true;
+        $this->stdout = new \React\Stream\WritableResourceStream(STDOUT);
 
-        $number = max(0, static::$number-count(static::$processes));
+        $number = max(0, $this->number-count($this->processes));
 
         for ($i = 0; $i < $number; $i++) {
-            static::runProcess($php);
+            $this->runProcess();
         }
     }
 
-    protected static function runProcess($php = null, $once = false)
+    protected function runProcess($once = false)
     {
-        $process = new BaseProcess('exec ' . ($php ?: 'php') . ' ' . __DIR__ . '/init.php');
+        $process = new BaseProcess('exec ' . ($this->php ?: 'php') . ' ' . __DIR__ . '/init.php');
         $process->start();
 
         if (!$once) {
-            static::$processes[$process->getPid()] = $process;
+            $this->processes[$process->getPid()] = $process;
         }
-        static::$unpackers[$process->getPid()] = new BufferUnpacker;
-        static::$processEvents[$process->getPid()] = new EventEmitter;
+        $this->unpackers[$process->getPid()] = new BufferUnpacker;
+        $this->processEvents[$process->getPid()] = new EventEmitter;
 
         $process->stdout->on('data', function ($chunk) use ($process) {
             
             $pid = $process->getPid();
-            static::recorProcessActiveTime($pid);
-            $unpacker = static::$unpackers[$pid];
+            $this->recordProcessActiveTime($pid);
+            $unpacker = $this->unpackers[$pid];
             $unpacker->append($chunk);
             if ($messages = $unpacker->tryUnpack()) {
                 $unpacker->release();
                 foreach ($messages as $message) {
                     if (is_array($message)) {
                         if (isset($message['cmd'])) {
-                            if (static::$log) {
-                                static::getStdout()->write(json_encode($message, JSON_UNESCAPED_UNICODE) . "-cmd\n");
+                            if ($this->log) {
+                                $this->getStdout()->write(json_encode($message, JSON_UNESCAPED_UNICODE) . "-cmd\n");
                             }
                             if ($message['cmd'] == 'init') {
-                                static::$processInit[$pid] = true;
-                                static::$processEvents[$pid]->emit('init', [$message['data'] ?? []]);
+                                $this->processInit[$pid] = true;
+                                $this->processEvents[$pid]->emit('init', [$message['data'] ?? []]);
                             } elseif (in_array($message['cmd'], [
                                 'error',
                                 'data',
                                 'close',
                                 'end',
                             ])) {
-                                if (isset(static::$processCallbackStreams[$pid][$message['uuid']])) {
+                                if (isset($this->processCallbackStreams[$pid][$message['uuid']])) {
                                     if ($message['cmd'] == 'close') {
-                                        $stream = static::$processCallbackStreams[$pid][$message['uuid']]['stream'];
-                                        unset(static::$processCallbackStreams[$pid][$message['uuid']]);
+                                        $stream = $this->processCallbackStreams[$pid][$message['uuid']]['stream'];
+                                        unset($this->processCallbackStreams[$pid][$message['uuid']]);
                                         $stream->close();
                                     } elseif ($message['cmd'] == 'end') {
-                                        $read = static::$processCallbackStreams[$pid][$message['uuid']]['read'];
-                                        unset(static::$processCallbackStreams[$pid][$message['uuid']]);
+                                        $read = $this->processCallbackStreams[$pid][$message['uuid']]['read'];
+                                        unset($this->processCallbackStreams[$pid][$message['uuid']]);
                                         $read->end($message['data']);
                                     } elseif ($message['cmd'] == 'error') {
-                                        $read = static::$processCallbackStreams[$pid][$message['uuid']]['read'];
-                                        unset(static::$processCallbackStreams[$pid][$message['uuid']]);
+                                        $read = $this->processCallbackStreams[$pid][$message['uuid']]['read'];
+                                        unset($this->processCallbackStreams[$pid][$message['uuid']]);
                                         $read->emit('error', [new \Exception($message['data'])]);
                                     } elseif ($message['cmd'] == 'data') {
-                                        static::$processCallbackStreams[$pid][$message['uuid']]['read']->write($message['data']);
+                                        $this->processCallbackStreams[$pid][$message['uuid']]['read']->write($message['data']);
                                     }
                                 }
                             } elseif ($message['cmd'] == 'log') {
-                                //static::getStdout()->write(json_encode($message, JSON_UNESCAPED_UNICODE)."\n");
+                                //$this->getStdout()->write(json_encode($message, JSON_UNESCAPED_UNICODE)."\n");
                             }
                         }
                     }
@@ -107,53 +121,53 @@ class Process
 
 
         $process->stdout->on('end', function () use ($process) {
-            static::debug([
+            $this->debug([
                 'pid' => $process->getPid(),
                 'end' => 'end',
             ]);
         });
 
         $process->stdout->on('error', function (\Exception $e) use ($process) {
-            static::debug([
+            $this->debug([
                 'pid' => $process->getPid(),
                 'error' => $e->getMessage(),
             ]);
         });
 
         $process->stdout->on('close', function () use ($process) {
-            static::debug([
+            $this->debug([
                 'pid' => $process->getPid(),
                 'close' => 'close',
             ]);
         });
 
-        $process->on('exit', function ($exitCode, $termSignal) use ($process, $php, $once) {
-            static::debug([
+        $process->on('exit', function ($exitCode, $termSignal) use ($process, $once) {
+            $this->debug([
                 'pid' => $process->getPid(),
                 'exitCode' => $exitCode,
                 'termSignal' => $termSignal,
             ]);
-            unset(static::$processes[$process->getPid()]);
-            unset(static::$unpackers[$process->getPid()]);
-            foreach ((static::$processCallbackStreams[$process->getPid()] ?? []) as $uuid => $stream) {
+            unset($this->processes[$process->getPid()]);
+            unset($this->unpackers[$process->getPid()]);
+            foreach (($this->processCallbackStreams[$process->getPid()] ?? []) as $uuid => $stream) {
                 $stream['stream']->close();
             }
-            unset(static::$processInit[$process->getPid()]);
-            unset(static::$processEvents[$process->getPid()]);
+            unset($this->processInit[$process->getPid()]);
+            unset($this->processEvents[$process->getPid()]);
             if (!$once) {
                 // 进程主动关闭的情况下不启动新进程
-                if (!static::isTerminateOrClose($process->getPid())) {
-                    static::runProcess($php);
+                if (!$this->isTerminateOrClose($process->getPid())) {
+                    $this->runProcess();
                 }
             }
-            unset(static::$processInfo[$process->getPid()]);
+            unset($this->processInfo[$process->getPid()]);
         });
         return $process;
     }
 
-    public static function debug($msg)
+    public function debug($msg)
     {
-        if (!static::$debug) {
+        if (!$this->debug) {
             return;
         }
 
@@ -163,27 +177,27 @@ class Process
         echo $msg . "\n";
     }
 
-    public static function callback($closure, $once = false, $php = null)
+    public function callback($closure, $once = false)
     {
-        if (!static::$running) {
+        if (!$this->running) {
             if (!$once) {
-                static::run($php);
+                $this->run();
             }
         } else {
             if (!$once) {
                 // 之前关闭过进程, 重新启动
-                if (count(static::$processes) == 0) {
-                    static::runProcess($php);
+                if (count($this->processes) == 0) {
+                    $this->runProcess();
                 }
             }
         }
 
-        $serialized = static::getSeralized($closure);
+        $serialized = $this->getSeralized($closure);
         // 随机一个进程
         if ($once) {
-            $process = static::runProcess($php, true);
+            $process = $this->runProcess(true);
         } else {
-            $process = static::randomProcess($php = null);
+            $process = $this->randomProcess();
         }
         $uuid = $process->getPid() . '-' . time() . '-' . uniqid() . '-' . md5($serialized);
 
@@ -191,7 +205,7 @@ class Process
         $write = new Stream\ThroughStream;
 
         $stream = new Stream\CompositeStream($read, $write);
-        static::$processCallbackStreams[$process->getPid()][$uuid] = [
+        $this->processCallbackStreams[$process->getPid()][$uuid] = [
             'read' => $read,
             'write' => $write,
             'stream' => $stream,
@@ -207,8 +221,8 @@ class Process
 
 
         $packs = [];
-        if (!isset(static::$processInit[$process->getPid()])) {
-            static::$processEvents[$process->getPid()]->once('init', function () use ($process, $pack, &$packs) {
+        if (!isset($this->processInit[$process->getPid()])) {
+            $this->processEvents[$process->getPid()]->once('init', function () use ($process, $pack, &$packs) {
                 $process->stdin->write($pack);
                 foreach ($packs as $_pack) {
                     $process->stdin->write($_pack);
@@ -220,7 +234,7 @@ class Process
         }
 
         $write->on('data', function ($data) use ($process, $uuid, &$packs) {
-            static::recorProcessActiveTime($process->getPid());
+            $this->recordProcessActiveTime($process->getPid());
 
             $pack = MessagePack::pack([
                 'cmd' => 'data',
@@ -228,7 +242,7 @@ class Process
                 'data' => $data
             ]);
             // 避免没有初始化，先存起来
-            if (!isset(static::$processInit[$process->getPid()])) {
+            if (!isset($this->processInit[$process->getPid()])) {
                 $packs[] = $pack;
             } else {
                 $process->stdin->write($pack);
@@ -237,8 +251,8 @@ class Process
 
         $stream->on('error', function ($e) use ($process, $uuid) {
             // 主动error
-            if (isset(static::$processCallbackStreams[$process->getPid()][$uuid])) {
-                unset(static::$processCallbackStreams[$process->getPid()][$uuid]);
+            if (isset($this->processCallbackStreams[$process->getPid()][$uuid])) {
+                unset($this->processCallbackStreams[$process->getPid()][$uuid]);
                 $process->stdin->write(MessagePack::pack([
                     'cmd' => 'error',
                     'uuid' => $uuid,
@@ -254,8 +268,8 @@ class Process
 
         $stream->on('end', function () use ($process, $uuid) {
             // 主动end
-            if (isset(static::$processCallbackStreams[$process->getPid()][$uuid])) {
-                unset(static::$processCallbackStreams[$process->getPid()][$uuid]);
+            if (isset($this->processCallbackStreams[$process->getPid()][$uuid])) {
+                unset($this->processCallbackStreams[$process->getPid()][$uuid]);
                 $process->stdin->write(MessagePack::pack([
                     'cmd' => 'end',
                     'uuid' => $uuid,
@@ -266,8 +280,8 @@ class Process
         $stream->on('close', function () use ($process, $once, $uuid) {
 
             // 主动close
-            if (isset(static::$processCallbackStreams[$process->getPid()][$uuid])) {
-                unset(static::$processCallbackStreams[$process->getPid()][$uuid]);
+            if (isset($this->processCallbackStreams[$process->getPid()][$uuid])) {
+                unset($this->processCallbackStreams[$process->getPid()][$uuid]);
                 $process->stdin->write(MessagePack::pack([
                     'cmd' => 'close',
                     'uuid' => $uuid,
@@ -278,23 +292,23 @@ class Process
                 $process->terminate();
             }
         });
-        static::recorProcessActiveTime($process->getPid());
+        $this->recordProcessActiveTime($process->getPid());
 
         return $stream;
     }
 
-    private static function recorProcessActiveTime($pid)
+    private function recordProcessActiveTime($pid)
     {
-        static::$processInfo[$pid]['active_time'] = time();
+        $this->processInfo[$pid]['active_time'] = time();
     }
 
 
 
-    public static function terminate($pid = null)
+    public function terminate($pid = null)
     {
-        $processes = static::$processes;
+        $processes = $this->processes;
         if ($pid) {
-            $process = static::$processes[$pid] ?? [];
+            $process = $this->processes[$pid] ?? [];
             if ($process) {
                 $processes = [
                     $pid => $process
@@ -303,18 +317,18 @@ class Process
         }
 
         foreach ($processes as $process) {
-            static::$processInfo[$process->getPid()]['terminate'] = true;
+            $this->processInfo[$process->getPid()]['terminate'] = true;
             // 移除掉，避免找到这个进程
-            unset(static::$processes[$process->getPid()]);
+            unset($this->processes[$process->getPid()]);
             $process->terminate();
         }
     }
 
-    public static function close($pid = null)
+    public function close($pid = null)
     {
-        $processes = static::$processes;
+        $processes = $this->processes;
         if ($pid) {
-            $process = static::$processes[$pid] ?? [];
+            $process = $this->processes[$pid] ?? [];
             if ($process) {
                 $processes = [
                     $pid => $process
@@ -323,47 +337,47 @@ class Process
         }
 
         foreach ($processes as $process) {
-            static::$processInfo[$process->getPid()]['close'] = true;
+            $this->processInfo[$process->getPid()]['close'] = true;
             // 移除掉，避免找到这个进程
-            unset(static::$processes[$process->getPid()]);
+            unset($this->processes[$process->getPid()]);
             $process->close();
         }
     }
-    public static function reload($php = null)
+    public function reload()
     {
-        static::terminate();
-        static::$running = false;
-        static::run($php);
+        $this->terminate();
+        $this->running = false;
+        $this->run();
     }
     
-    public static function restart($php = null)
+    public function restart()
     {
-        static::close();
-        static::$running = false;
-        static::run($php);
+        $this->close();
+        $this->running = false;
+        $this->run();
     }
 
 
 
-    private static function isTerminateOrClose($pid)
+    private function isTerminateOrClose($pid)
     {
-        return (static::$processInfo[$pid]['terminate'] ?? false) || (static::$processInfo[$pid]['close'] ?? false);
+        return ($this->processInfo[$pid]['terminate'] ?? false) || ($this->processInfo[$pid]['close'] ?? false);
     }
 
-    private static function randomProcess($php = null)
+    private function randomProcess()
     {
-        if (count(static::$processes) == 0) {
-            return static::runProcess($php);
+        if (count($this->processes) == 0) {
+            return $this->runProcess();
         }
-        return static::$processes[array_rand(static::$processes)];
+        return $this->processes[array_rand($this->processes)];
     }
 
-    public static function getSeralized($closure)
+    public function getSeralized($closure)
     {
         return serialize(new SerializableClosure($closure));
     }
 
-    public static function handleCallback($message)
+    public function handleCallback($message)
     {
 
         $cmd = $message['cmd'];
@@ -378,30 +392,30 @@ class Process
             $write = new Stream\ThroughStream;
 
             $stream = new Stream\CompositeStream($read, $write);
-            static::$processCallbackStreams[$pid][$uuid] = [
+            $this->processCallbackStreams[$pid][$uuid] = [
                 'read' => $read,
                 'write' => $write,
                 'stream' => $stream,
             ];
 
             $write->on('data', function ($data) use ($uuid) {
-                static::replayData($uuid, $data);
+                $this->replayData($uuid, $data);
             });
 
             $stream->on('end', function () use ($pid, $uuid) {
 
                 // 主动end
-                if (isset(static::$processCallbackStreams[$pid][$uuid])) {
-                    unset(static::$processCallbackStreams[$pid][$uuid]);
-                    static::replayEnd($uuid);
+                if (isset($this->processCallbackStreams[$pid][$uuid])) {
+                    unset($this->processCallbackStreams[$pid][$uuid]);
+                    $this->replayEnd($uuid);
                 }
             });
 
             $stream->on('error', function ($e) use ($pid, $uuid) {
                 // 主动error
-                if (isset(static::$processCallbackStreams[$pid][$uuid])) {
-                    unset(static::$processCallbackStreams[$pid][$uuid]);
-                    static::replayError($uuid, json_encode([
+                if (isset($this->processCallbackStreams[$pid][$uuid])) {
+                    unset($this->processCallbackStreams[$pid][$uuid]);
+                    $this->replayError($uuid, json_encode([
                         'message' => $e->getMessage(),
                         'code' => $e->getCode(),
                         'file' => $e->getFile(),
@@ -412,16 +426,16 @@ class Process
 
             $stream->on('close', function () use ($pid, $uuid) {
                 // 主动close
-                if (isset(static::$processCallbackStreams[$pid][$uuid])) {
-                    unset(static::$processCallbackStreams[$pid][$uuid]);
-                    static::replayClose($uuid);
+                if (isset($this->processCallbackStreams[$pid][$uuid])) {
+                    unset($this->processCallbackStreams[$pid][$uuid]);
+                    $this->replayClose($uuid);
                 }
             });
 
             try {
                 $r = $closure($stream);
             } catch (\Throwable $th) {
-                static::replayLog('error:' . json_encode([
+                $this->replayLog('error:' . json_encode([
                     'message' => $th->getMessage(),
                     'code' => $th->getCode(),
                     'file' => $th->getFile(),
@@ -440,26 +454,26 @@ class Process
         ])) {
 
 
-            if (isset(static::$processCallbackStreams[$pid][$uuid])) {
-                static::replayLog('cmd:' . $cmd . ' uuid:' . $uuid . ' pid:' . $pid);
+            if (isset($this->processCallbackStreams[$pid][$uuid])) {
+                $this->replayLog('cmd:' . $cmd . ' uuid:' . $uuid . ' pid:' . $pid);
                 if ($cmd == 'close') {
-                    $stream = static::$processCallbackStreams[$pid][$uuid]['stream'];
-                    unset(static::$processCallbackStreams[$pid][$uuid]);
+                    $stream = $this->processCallbackStreams[$pid][$uuid]['stream'];
+                    unset($this->processCallbackStreams[$pid][$uuid]);
                     $stream->close();
                 } elseif ($cmd == 'error') {
-                    $read = static::$processCallbackStreams[$pid][$uuid]['read'];
-                    unset(static::$processCallbackStreams[$pid][$uuid]);
+                    $read = $this->processCallbackStreams[$pid][$uuid]['read'];
+                    unset($this->processCallbackStreams[$pid][$uuid]);
                     $read->emit('error', [new \Exception($message['data'])]);
                 } elseif ($cmd == 'end') {
-                    $read = static::$processCallbackStreams[$pid][$uuid]['read'];
-                    unset(static::$processCallbackStreams[$pid][$uuid]);
+                    $read = $this->processCallbackStreams[$pid][$uuid]['read'];
+                    unset($this->processCallbackStreams[$pid][$uuid]);
                     $read->end($message['data']);
                 } elseif ($cmd == 'data') {
-                    static::$processCallbackStreams[$pid][$uuid]['read']->write($message['data']);
+                    $this->processCallbackStreams[$pid][$uuid]['read']->write($message['data']);
                 }
             }
         }
-        // static::replayLog('cmd:' . $cmd . ' uuid:' . $uuid . ' pid:' . $pid.' '. microtime(true));
+        // $this->replayLog('cmd:' . $cmd . ' uuid:' . $uuid . ' pid:' . $pid.' '. microtime(true));
 
     }
 
@@ -467,9 +481,9 @@ class Process
 
     // 给父进程回复
 
-    private static function replayData($uuid, $data)
+    private function replayData($uuid, $data)
     {
-        static::replay([
+        $this->replay([
             'cmd' => 'data',
             'uuid' => $uuid,
             'data' => $data
@@ -477,37 +491,37 @@ class Process
     }
 
 
-    private static function replayClose($uuid, $data = null)
+    private function replayClose($uuid, $data = null)
     {
-        static::replay([
+        $this->replay([
             'cmd' => 'close',
             'uuid' => $uuid,
             'data' => $data
         ]);
     }
 
-    private static function replayError($uuid, $data = null)
+    private function replayError($uuid, $data = null)
     {
-        static::replay([
+        $this->replay([
             'cmd' => 'error',
             'uuid' => $uuid,
             'data' => $data
         ]);
     }
 
-    private static function replayEnd($uuid, $data = null)
+    private function replayEnd($uuid, $data = null)
     {
-        static::replay([
+        $this->replay([
             'cmd' => 'end',
             'uuid' => $uuid,
             'data' => $data
         ]);
     }
 
-    public static function replayInit($extra = [])
+    public function replayInit($extra = [])
     {
         $pid = getmypid();
-        static::replay([
+        $this->replay([
             'cmd' => 'init',
             'data' => [
                 'msg' => "Process {$pid} init success!\n",
@@ -515,26 +529,26 @@ class Process
             ]
         ]);
     }
-    public static function replayLog($data)
+    public function replayLog($data)
     {
 
-        static::replay([
+        $this->replay([
             'cmd' => 'log',
             'data' => $data
         ]);
     }
 
-    public static function replay($data)
+    public function replay($data)
     {
-        static::getStdout()->write(MessagePack::pack($data));
+        $this->getStdout()->write(MessagePack::pack($data));
     }
 
 
-    public static function getStdout()
+    public function getStdout()
     {
-        if (static::$stdout) {
-            return static::$stdout;
+        if ($this->stdout) {
+            return $this->stdout;
         }
-        return static::$stdout = new \React\Stream\WritableResourceStream(STDOUT);
+        return $this->stdout = new \React\Stream\WritableResourceStream(STDOUT);
     }
 }

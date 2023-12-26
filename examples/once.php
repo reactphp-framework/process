@@ -2,9 +2,15 @@
 
 require __DIR__ . '/../vendor/autoload.php';
 
-use Reactphp\Framework\Process\Process;
+use Reactphp\Framework\Process\ProcessManager;
 
-$stream = Process::callback(function () {
+ProcessManager::instance()->initProcessNumber(1);
+
+
+ProcessManager::instance()->log = true;
+ProcessManager::instance()->debug = true;
+
+$stream = ProcessManager::instance()->callback(function () {
     return [
         'hello' => 'world'
     ];

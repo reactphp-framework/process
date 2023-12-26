@@ -3,19 +3,16 @@
 namespace Reactphp\Framework\Process\Tests;
 
 use PHPUnit\Framework\TestCase;
-use Reactphp\Framework\Process\Process;
-use function React\Async\async;
+use Reactphp\Framework\Process\ProcessManager;
 use function React\Async\await;
-use function React\Async\delay;
 use React\Promise\Deferred;
-use React\EventLoop\Loop;
 
 class ToChildProcessTest extends TestCase
 {
     public function testSendToChildProcessMessage()
     {
-        Process::$log = false;
-        $stream = Process::callback(function ($stream) {
+        ProcessManager::instance()->initProcessNumber(1);
+        $stream = ProcessManager::instance()->callback(function ($stream) {
             $stream->on('data', function ($buffer) use ($stream) {
                 if ($buffer == 10) {
                     $stream->end($buffer + 1);
@@ -41,6 +38,6 @@ class ToChildProcessTest extends TestCase
         });
         $data = await($deferred->promise());
         $this->assertEquals('1234567891011', $data);
-        Process::terminate();
+        ProcessManager::instance()->terminate();
     }
 }

@@ -7,28 +7,28 @@ if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
     require __DIR__ . '/../../../autoload.php';
 }
 
-use Reactphp\Framework\Process\Process;
+use Reactphp\Framework\Process\ProcessManager;
 use MessagePack\BufferUnpacker;
 use MessagePack\MessagePack;
+
+ProcessManager::instance()->initProcessNumber(1);
 
 $unpacker = new BufferUnpacker();
 
 $stream = new \React\Stream\ReadableResourceStream(STDIN);
-
-$stream->on('data', function ($chunk)  use ($unpacker) {
-    $pid = getmypid();
+$pid = getmypid();
+$stream->on('data', function ($chunk)  use ($pid, $unpacker) {
     $unpacker->append($chunk);
     if ($messages = $unpacker->tryUnpack()) {
         $unpacker->release();
         foreach ($messages as $message) {
             // log 
             // Process::replayLog("Process {$pid} receive data\n"); 
-            Process::handleCallback($message);
+            ProcessManager::instance()->handleCallback($message);
         }
-        
         return $messages;
     } else {
-        Process::replay("Task {$pid} tryPack fail\n");
+        ProcessManager::instance()->replay("Task {$pid} tryPack fail\n");
     }
 });
 
@@ -41,10 +41,10 @@ $stream->on('end', function () {
 //     'cmd' => 'task',
 //     'uuid' => 'hello',
 //     'data' => [
-//         'serialized' => Process::getSeralized(function () {
+//         'serialized' => ProcessManager::instance()->getSeralized(function () {
 //             return 'james';
 //         })
 //     ]
 // ])]);
 
-Process::replayInit();
+ProcessManager::instance()->replayInit();

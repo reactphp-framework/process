@@ -2,15 +2,17 @@
 
 require __DIR__ . '/../vendor/autoload.php';
 
-use Reactphp\Framework\Process\Process;
+use Reactphp\Framework\Process\ProcessManager;
 use React\EventLoop\Loop;
 
-Process::$number = 20;
+$process = ProcessManager::instance()->initProcessNumber(20);
+ProcessManager::instance()->log = true;
+ProcessManager::instance()->debug = true;
 
 function test($j)
 {
     echo "test {$j}\n";
-    $stream = Process::callback(function ($stream) use ($j) {
+    $stream = ProcessManager::instance()->callback(function ($stream) use ($j) {
         $i = 0;
         $timer = Loop::addPeriodicTimer(1, function () use ($stream, $j, &$i) {
             $stream->write('hello world-' . $j . '-' . $i++);
