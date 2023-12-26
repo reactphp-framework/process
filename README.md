@@ -25,7 +25,7 @@ $stream = ProcessManager::instance()->callback(function () {
 
 $stream->on('data', function ($data) {
     var_dump($data);
-    ProcessManager::instance()terminate();
+    ProcessManager::instance()->terminate();
 });
 ```
 
