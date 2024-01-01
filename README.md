@@ -95,6 +95,8 @@ ProcessManager::instance()->initProcessNumber(4);
 ```
 ProcessManager::instance()->log = true;
 ProcessManager::instance()->debug = true;
+
+// callback output use error_log('hello world');
 ```
 
 ### reload 
