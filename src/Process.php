@@ -141,6 +141,13 @@ class Process
             ]);
         });
 
+        $process->stderr->on('data', function ($chunk) use ($process) {
+            $this->debug([
+                'pid' => $process->getPid(),
+                'stderr' => $chunk,
+            ]);
+        });
+
         $process->on('exit', function ($exitCode, $termSignal) use ($process, $once) {
             $this->debug([
                 'pid' => $process->getPid(),

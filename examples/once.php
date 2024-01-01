@@ -11,6 +11,7 @@ ProcessManager::instance()->log = true;
 ProcessManager::instance()->debug = true;
 
 $stream = ProcessManager::instance()->callback(function () {
+    error_log('hello world'); // debug to term not use echo
     return [
         'hello' => 'world'
     ];
