@@ -105,6 +105,8 @@ class Process
                                         $read = $this->processCallbackStreams[$pid][$message['uuid']]['read'];
                                         unset($this->processCallbackStreams[$pid][$message['uuid']]);
                                         $read->emit('error', [new \Exception($message['data'])]);
+                                        // friendly close
+                                        $read->end();
                                     } elseif ($message['cmd'] == 'data') {
                                         $this->processCallbackStreams[$pid][$message['uuid']]['read']->write($message['data']);
                                     }
@@ -257,7 +259,7 @@ class Process
             }           
         });
 
-        $stream->on('error', function ($e) use ($process, $uuid) {
+        $stream->on('error', function ($e) use ($stream, $process, $uuid) {
             // 主动error
             if (isset($this->processCallbackStreams[$process->getPid()][$uuid])) {
                 unset($this->processCallbackStreams[$process->getPid()][$uuid]);
@@ -271,6 +273,7 @@ class Process
                         'line' => $e->getLine(),
                     ], JSON_UNESCAPED_UNICODE),
                 ]));
+                $stream->close();
             }
         });
 
@@ -419,7 +422,7 @@ class Process
                 }
             });
 
-            $stream->on('error', function ($e) use ($pid, $uuid) {
+            $stream->on('error', function ($e) use ($stream, $pid, $uuid) {
                 // 主动error
                 if (isset($this->processCallbackStreams[$pid][$uuid])) {
                     unset($this->processCallbackStreams[$pid][$uuid]);
@@ -429,6 +432,7 @@ class Process
                         'file' => $e->getFile(),
                         'line' => $e->getLine(),
                     ], JSON_UNESCAPED_UNICODE));
+                    $stream->close();
                 }
             });
 
@@ -442,18 +446,13 @@ class Process
 
             try {
                 $r = $closure($stream);
+                if ($r !== $stream) {
+                    $stream->end($r);
+                }
             } catch (\Throwable $th) {
-                $this->replayLog('error:' . json_encode([
-                    'message' => $th->getMessage(),
-                    'code' => $th->getCode(),
-                    'file' => $th->getFile(),
-                    'line' => $th->getLine(),
-                ], JSON_UNESCAPED_UNICODE));
+                $stream->emit('error', [$th]);
             }
 
-            if ($r !== $stream) {
-                $stream->end($r);
-            }
         } elseif (in_array($cmd, [
             'data',
             'end',
@@ -473,6 +472,8 @@ class Process
                     $read = $this->processCallbackStreams[$pid][$uuid]['read'];
                     unset($this->processCallbackStreams[$pid][$uuid]);
                     $read->emit('error', [new \Exception($message['data'])]);
+                    // friendly close
+                    $read->end();
                 } elseif ($cmd == 'end') {
                     $read = $this->processCallbackStreams[$pid][$uuid]['read'];
                     unset($this->processCallbackStreams[$pid][$uuid]);
