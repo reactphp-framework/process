@@ -50,7 +50,7 @@ class Process
         $this->running = true;
         $this->stdout = new \React\Stream\WritableResourceStream(STDOUT);
 
-        $number = max(0, $this->number-count($this->processes));
+        $number = max(0, $this->number - count($this->processes));
 
         for ($i = 0; $i < $number; $i++) {
             $this->runProcess();
@@ -69,7 +69,7 @@ class Process
         $this->processEvents[$process->getPid()] = new EventEmitter;
 
         $process->stdout->on('data', function ($chunk) use ($process) {
-            
+
             $pid = $process->getPid();
             $this->recordProcessActiveTime($pid);
             $unpacker = $this->unpackers[$pid];
@@ -256,7 +256,7 @@ class Process
                 $packs[] = $pack;
             } else {
                 $process->stdin->write($pack);
-            }           
+            }
         });
 
         $stream->on('error', function ($e) use ($stream, $process, $uuid) {
@@ -317,6 +317,9 @@ class Process
 
     public function terminate($pid = null)
     {
+        if (!$this->running) {
+            return;
+        }
         $processes = $this->processes;
         if ($pid) {
             $process = $this->processes[$pid] ?? [];
@@ -333,10 +336,14 @@ class Process
             unset($this->processes[$process->getPid()]);
             $process->terminate();
         }
+        $this->running = false;
     }
 
     public function close($pid = null)
     {
+        if (!$this->running) {
+            return;
+        }
         $processes = $this->processes;
         if ($pid) {
             $process = $this->processes[$pid] ?? [];
@@ -353,22 +360,20 @@ class Process
             unset($this->processes[$process->getPid()]);
             $process->close();
         }
+        $this->running = false;
     }
+    
     public function reload()
     {
         $this->terminate();
-        $this->running = false;
         $this->run();
     }
-    
+
     public function restart()
     {
         $this->close();
-        $this->running = false;
         $this->run();
     }
-
-
 
     private function isTerminateOrClose($pid)
     {
@@ -452,7 +457,6 @@ class Process
             } catch (\Throwable $th) {
                 $stream->emit('error', [$th]);
             }
-
         } elseif (in_array($cmd, [
             'data',
             'end',
