@@ -95,7 +95,8 @@ class Process
                                     if ($message['cmd'] == 'close') {
                                         $stream = $this->processCallbackStreams[$pid][$message['uuid']]['stream'];
                                         unset($this->processCallbackStreams[$pid][$message['uuid']]);
-                                        $stream->close();
+                                        // friendly close
+                                        $stream->end();
                                     } elseif ($message['cmd'] == 'end') {
                                         $read = $this->processCallbackStreams[$pid][$message['uuid']]['read'];
                                         unset($this->processCallbackStreams[$pid][$message['uuid']]);
@@ -466,7 +467,8 @@ class Process
                 if ($cmd == 'close') {
                     $stream = $this->processCallbackStreams[$pid][$uuid]['stream'];
                     unset($this->processCallbackStreams[$pid][$uuid]);
-                    $stream->close();
+                    // friendly close
+                    $stream->end();
                 } elseif ($cmd == 'error') {
                     $read = $this->processCallbackStreams[$pid][$uuid]['read'];
                     unset($this->processCallbackStreams[$pid][$uuid]);

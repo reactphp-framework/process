@@ -30,7 +30,7 @@ function test($j)
     });
 
     $stream->on('end', function ($data) {
-        echo ($data) . "\n";
+        echo "end\n";
     });
 
     $stream->on('close', function () {
