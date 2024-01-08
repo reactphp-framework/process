@@ -8,10 +8,13 @@ use Laravel\SerializableClosure\SerializableClosure;
 use MessagePack\BufferUnpacker;
 use Evenement\EventEmitter;
 use React\Stream;
+use React\EventLoop\Loop;
 
 class Process
 {
     protected $number = 1;
+    protected $min = 1;
+    protected $max = 1;
     public  $log = false;
     public  $debug = false;
 
@@ -26,19 +29,45 @@ class Process
     protected  $processCallbackStreams = [];
 
     protected  $running = false;
+    protected $startAt = 0;
+    protected $overTime = 60;
+    protected $checkCycle = 10;
 
     private $php;
+    private $timer;
 
 
     public function __construct($number, $php = null)
     {
-        $this->number = $number;
+        $this->setNumber($number);
+        $this->setMin($number);
+        $this->setMax($number);
         $this->php = $php;
     }
 
     public function setNumber($number)
     {
         $this->number = $number;
+    }
+
+    public function setMin($min)
+    {
+        $this->min = $min;
+    }
+
+    public function setMax($max)
+    {
+        $this->max = $max;
+    }
+
+    public function setOverTime($overTime)
+    {
+        $this->overTime = $overTime;
+    }
+
+    public function setCheckCycle($checkCycle)
+    {
+        $this->checkCycle = $checkCycle;
     }
 
     public function run()
@@ -48,13 +77,62 @@ class Process
         }
 
         $this->running = true;
+        $this->startAt = time();
         $this->stdout = new \React\Stream\WritableResourceStream(STDOUT);
 
-        $number = max(0, $this->number - count($this->processes));
-
-        for ($i = 0; $i < $number; $i++) {
+        for ($i = 0; $i < $this->number; $i++) {
             $this->runProcess();
         }
+
+        $this->timer = Loop::addPeriodicTimer($this->checkCycle, function () {
+            $isClose = false;
+            $isAllActive = true;
+            $upProcessNumber = 1;
+
+            foreach ($this->processes as $pid => $process) {
+                // auto close process
+
+                if (count($this->processes) > $this->min) {
+                    if (time() - ($this->processInfo[$pid]['active_time'] ?? 0) > $this->overTime) {
+                        $this->debug([
+                            'pid' => $pid,
+                            'info' => 'auto close',
+                        ]);
+                        $isClose = true;
+                        $isAllActive = false;
+                        $this->terminate($pid);
+                    } else {
+                        if (time() - $this->startAt <= $this->overTime) {
+                            $isAllActive = false;
+                        }
+                    }
+                } else if (count($this->processes) == $this->min) {
+                    if (time() - ($this->processInfo[$pid]['active_time'] ?? 0) > $this->overTime) {
+                        $isAllActive = false;
+                    } else {
+                        if (time() - $this->startAt <= $this->overTime) {
+                            $isAllActive = false;
+                        }
+                    }
+                } else {
+                    $isAllActive = true;
+                    $upProcessNumber = $this->min - count($this->processes);
+                }        
+            }
+
+
+            if (!$isClose && $isAllActive) {
+                // auto up process
+                if (count($this->processes) < $this->max) {
+                    $this->debug([
+                        'info' => 'auto up',
+                    ]);
+                    for ($i = 0; $i < $upProcessNumber; $i++) {
+                        $this->runProcess();
+                    }
+                }
+            }
+        });
     }
 
     protected function runProcess($once = false)
@@ -328,6 +406,8 @@ class Process
                     $pid => $process
                 ];
             }
+        } else {
+            $this->running = false;
         }
 
         foreach ($processes as $process) {
@@ -336,7 +416,11 @@ class Process
             unset($this->processes[$process->getPid()]);
             $process->terminate();
         }
-        $this->running = false;
+
+        if (!$pid && $this->timer) {
+            Loop::cancelTimer($this->timer);
+            $this->timer = null;
+        }
     }
 
     public function close($pid = null)
@@ -352,6 +436,8 @@ class Process
                     $pid => $process
                 ];
             }
+        } else {
+            $this->running = false;
         }
 
         foreach ($processes as $process) {
@@ -360,9 +446,12 @@ class Process
             unset($this->processes[$process->getPid()]);
             $process->close();
         }
-        $this->running = false;
+        if (!$pid && $this->timer) {
+            Loop::cancelTimer($this->timer);
+            $this->timer = null;
+        }
     }
-    
+
     public function reload()
     {
         $this->terminate();
@@ -386,6 +475,11 @@ class Process
             return $this->runProcess();
         }
         return $this->processes[array_rand($this->processes)];
+    }
+
+    public function getProcessNumber()
+    {
+        return count($this->processes);
     }
 
     public function getSeralized($closure)

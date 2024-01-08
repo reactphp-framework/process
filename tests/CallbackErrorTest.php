@@ -12,8 +12,8 @@ class CallbackErrorTest extends TestCase
     public function testCallbackError()
     {
         // ProcessManager::instance()->initProcessNumber();
-        ProcessManager::instance()->debug = true;
-        ProcessManager::instance()->log = true;
+        // ProcessManager::instance()->debug = true;
+        // ProcessManager::instance()->log = true;
         $deferred = new Deferred();
         $stream = ProcessManager::instance('once')->callback(function ($stream) {
             $content = file_get_contents('./not-exists.txt');
